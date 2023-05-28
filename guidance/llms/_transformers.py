@@ -61,29 +61,29 @@ class Transformers(LLM):
             out = self._tokenizer(string, **kwargs)
         else:
             out = self._tokenizer.encode(string, **kwargs)
-        
+
         # remove the start token when we are encoding a suffix
         if fragment:
             if out[1] == self._tokenizer.bos_token_id: # sometime the tokenizer adds an extra start token
                 out = out[3:]
             else:
                 out = out[2:]
-        
+
         return out
-    
+
     def id_to_token(self, id):
         return self._tokenizer.convert_ids_to_tokens([id])[0]
-    
+
     def token_to_id(self, token):
         return self._tokenizer.convert_tokens_to_ids([token])[0]
-    
+
     # def role_start(self, role):
     #     """ The starting role tag for chat models.
 
     #     #TODO Right now this just assumes the StableLM syntax, but this should be expanded later.
     #     """
     #     return "<|"+role.upper()+"|>"
-    
+
     # def role_end(self, role=None):
     #     return ""
 
@@ -93,7 +93,7 @@ class Transformers(LLM):
     @staticmethod
     def role_start(role):
         raise NotImplementedError("In order to use chat role tags you need to use a chat-specific subclass of Transformers for your LLM from guidance.transformers.*!")
-    
+
     def decode(self, tokens, fragment=True, **kwargs):
 
         # if the last token is the end of string token, or the first is a start of string we remove it because it cause odd spacing decoding of fragments
@@ -106,7 +106,7 @@ class Transformers(LLM):
             if len(tokens) > 0 and tokens[0] == self._tokenizer.bos_token_id:
                 add_bos = self._tokenizer.bos_token
                 tokens = tokens[1:]
-        
+
         # Decode the string corresponding to a single suffix token.
         # Note that we need to decode after the start token for sentence-piece tokenizers so that white space is preserved
         if fragment:
@@ -140,9 +140,9 @@ class Transformers(LLM):
             if tokenizer is None:
                 tokenizer = transformers.AutoTokenizer.from_pretrained(model, **kwargs)
             model = transformers.AutoModelForCausalLM.from_pretrained(model, **kwargs)
-        
+
         assert tokenizer is not None, "You must give a tokenizer object when you provide a model object (as opposed to just a model name)!"
-            
+
         return model, tokenizer
 
     def session(self, asynchronous=False):
@@ -155,10 +155,10 @@ class Transformers(LLM):
 class TransformersSession(LLMSession):
     def __init__(self, llm):
         super().__init__(llm)
-        
+
         self._past_key_values = None
         self._prefix_cache = []
-    
+
     def __enter__(self):
 
         # we only need decorators if we are using token acceleration
@@ -173,7 +173,7 @@ class TransformersSession(LLMSession):
                     # would delete all but the last input_ids, and we have already removed
                     # the correct prefix from the input_ids (which is not always all but the last one)
                     if len(self._prefix_cache) > 0:
-                        
+
                         kwargs["past"] = None
                         input_ids = input_ids[:,len(self._prefix_cache):]
                         # if "attention_mask" in kwargs:
@@ -189,7 +189,7 @@ class TransformersSession(LLMSession):
                         # be up until the last token, just like transformer models normally expect
                         # so we can clear our cache and let transformers cache like normal
                         self._prefix_cache = [] # this will get refilled once the generate call is done
-                    
+
                         return model_kwargs
                     else:
                         return method(input_ids, **kwargs)
@@ -216,11 +216,11 @@ class TransformersSession(LLMSession):
 
     # def __call__(self, *args, **kwargs):
     #     return self.__call__(*args, **kwargs)
-    
+
     async def __call__(self, prompt, stop=None, stop_regex=None, temperature=None, n=1, max_tokens=1000, logprobs=None, top_p=1.0, echo=False, logit_bias=None, token_healing=None, pattern=None, stream=False, cache_seed=0, caching=None):
         """ Generate a completion of the given prompt.
         """
-        
+
         # fill in defaults
         if temperature is None:
             temperature = self.llm.temperature
@@ -290,7 +290,9 @@ class TransformersSession(LLMSession):
             # make sure we don't run off the end of the model
             max_context = (getattr(model_config, "max_sequence_length", None) or getattr(model_config, "max_seq_len", None) or getattr(model_config, "n_positions", None) or getattr(model_config, "max_position_embeddings"))
             print("max_context", max_context)
+            print("max_new_tokens", max_tokens)
             print("input_ids", input_ids)
+            print("len", len(input_ids[0]))
             if max_tokens + len(input_ids[0]) > max_context:
                 max_tokens = max_context - len(input_ids[0])
 
@@ -307,7 +309,7 @@ class TransformersSession(LLMSession):
                 prefix_match_len -= 1
 
             # trim the cache to what we can use
-            if prefix_match_len < len(self._prefix_cache): # prefix_match_len > 0 and 
+            if prefix_match_len < len(self._prefix_cache): # prefix_match_len > 0 and
                 self._past_key_values = tuple((key[:,:,:prefix_match_len,:],value[:,:,:prefix_match_len,:]) for key,value in self._past_key_values) # TODO: this is specific to the GPT2 tensor layout
                 self._prefix_cache = self._prefix_cache[:prefix_match_len]
 
@@ -315,7 +317,7 @@ class TransformersSession(LLMSession):
             # output_scores = logprobs is not None and logprobs > 0
 
             # position_ids = torch.arange(prefix_match_len, input_ids.shape[-1], dtype=torch.long).unsqueeze(0)
-                
+
             # trim input ids that we will pull from the cache instead of computing keys and values for
             # input_ids = input_ids[:,prefix_match_len:]
 
@@ -374,7 +376,7 @@ class TransformersSession(LLMSession):
                 self.llm.cache[key] = streamer.__next__()
                 self._update_prefix_cache(streamer)
         return self.llm.cache[key]
-    
+
     def _update_prefix_cache(self, streamer):
         # note what we now have cached and ready for our next call in this session
         if self._past_key_values and len(streamer.generated_sequence) == 1:
@@ -429,7 +431,7 @@ class TokenHealingLogitsProcessor():
         except KeyError:
             # this must be a special token outside the vocab, so we assume it does not have any valid extensions
             allowed_first_tokens = []
-        
+
         # if we have multiple possible completions past the last token, then biasing is needed
         if len(allowed_first_tokens) > 1:
             self.first_token_mask = torch.zeros(vocab_size)
@@ -437,7 +439,7 @@ class TokenHealingLogitsProcessor():
             if model.device is not None:
                 self.first_token_mask = self.first_token_mask.to(model.device)
             self.should_bias = True
-        
+
         # otherwise we have nothing to do (the last token is already unique)
         else:
             self.should_bias = False
@@ -448,10 +450,10 @@ class TokenHealingLogitsProcessor():
         if not self.should_bias:
             return scores
         self.should_bias = False
-        
+
         # make only allowed tokens possible
         return scores + self.first_token_mask
-    
+
 class BiasLogitsProcessor():
     """ Simple token biasing.
     """
@@ -460,7 +462,7 @@ class BiasLogitsProcessor():
         """ Build a new BiasLogitsProcessor.
         """
         import torch
-        
+
         self.bias_vector = torch.zeros(vocab_size)
         for token, bias in logit_bias.items():
             self.bias_vector[token] = bias
@@ -468,7 +470,7 @@ class BiasLogitsProcessor():
 
     def __call__(self, input_ids, scores):
         return scores + self.bias_vector
-    
+
 class RegexLogitsProcessor():
     """ Pattern guiding.
     
@@ -499,7 +501,7 @@ class RegexLogitsProcessor():
             processor is performance optimized (by integrating it into the sampling/greedy process).
         """
         import torch
-        
+
         if isinstance(stop_regex, str):
             stop_regex = [stop_regex]
         self.pattern_no_stop = regex.compile(pattern)
@@ -530,7 +532,7 @@ class RegexLogitsProcessor():
                 self.current_strings[i] = self.current_strings[i][self.prefix_length:]
 
         self.current_length = len(input_ids[0])
-        
+
         # compute the bias values
         self.bias_vector[:] = 0
         sort_inds = torch.argsort(scores, 1, True)
@@ -542,11 +544,11 @@ class RegexLogitsProcessor():
                 to_bias.append(int(sort_inds[0, i]))
                 if self.is_greedy:
                     break # we are done if we are doing greedy sampling and we found the top valid hit
-        
+
         # if we found no more valid tokens then we just end the sequence
         if not len(to_bias):
             to_bias = [self.eos_token_id]
-        
+
         # bias allowed tokens
         min_to_bias = float(scores[0, to_bias].min())
         bias_value = scores[0, sort_inds[0, 0]] - min_to_bias + 10 # make sure the tokens that fit the pattern have higher scores than the top value
@@ -572,14 +574,14 @@ class RegexStoppingCriteria():
             self.current_strings = ["" for _ in range(len(input_ids))]
         for i in range(len(self.current_strings)):
             self.current_strings[i] += self.decode(input_ids[i][self.current_length:])
-        
+
         # trim off the prefix string so we don't look for stop matches in the prompt
         if self.current_length == 0:
             for i in range(len(self.current_strings)):
                 self.current_strings[i] = self.current_strings[i][self.prefix_length:]
-        
+
         self.current_length = len(input_ids[0])
-        
+
         # check if all of the strings match a stop string (and hence we can stop the batch inference)
         all_done = True
         for i in range(len(self.current_strings)):
@@ -590,7 +592,7 @@ class RegexStoppingCriteria():
             if not found:
                 all_done = False
                 break
-        
+
         return all_done
 
 class TransformersStreamer():
@@ -618,16 +620,16 @@ class TransformersStreamer():
             new_tokens = token_obj
         else:
             new_tokens = token_obj['sequences']
-        
+
 
         if isinstance(new_tokens, torch.Tensor):
             new_tokens = new_tokens.cpu()
-        
+
         # if we are given a single sequence, then make it a batch of size 1
         if len(new_tokens.shape) == 1:
             new_tokens = new_tokens.unsqueeze(0)
-        
-        
+
+
         # extract the scores if we are given them (and format them to be the same shape as the tokens)
         if self.logprobs:
             assert len(new_tokens) == 1, "logprobs are not supported for batched generation right now in guidance.llms.Transformers"
@@ -636,12 +638,12 @@ class TransformersStreamer():
             if len_diff > 0:
                 new_scores = [None for i in range(len_diff)] + new_scores
             new_scores = [new_scores]
-        
+
         out = {"choices": [None for i in range(len(self.input_ids))]}
         put_data = False
         for i in range(len(self.input_ids)):
             self.generated_sequence[i].extend(list(new_tokens[i]))
-            
+
             # save logprobs if needed
             if self.logprobs:
                 for scores in new_scores[i]:
@@ -655,11 +657,11 @@ class TransformersStreamer():
                 display_tokens = list(self.generated_sequence[i][self.sequence_pos[i]:])
                 val = self.llm.decode(display_tokens)#[self.llm._prefix_token_id] + display_tokens)[len(self.llm._prefix_token):]
                 self.generated_string[i] += val
-                
+
                 if self.str_pos[i] < len(self.generated_string[i]):
                     val = self.generated_string[i][self.str_pos[i]:]
                     finish_reason = None
-                    
+
                     # check why we stopped
                     stop_pos = len(val) + 1
                     if len(self.generated_sequence[i]) >= self.max_total_tokens:
@@ -689,7 +691,7 @@ class TransformersStreamer():
                     # record the reason we stopped (if we have stopped)
                     if stop_pos <= len(val):
                         finish_reason = "stop"
-                    
+
                     # emit the data if we are not potentially in the middle of a stop sequence
                     if not found_partial or finish_reason is not None:
                         out["choices"][i] = {
@@ -704,7 +706,7 @@ class TransformersStreamer():
                         self.str_pos[i] = len(self.generated_string[i])
                         put_data = True
                 self.sequence_pos[i] = len(self.generated_sequence[i])
-        
+
         if put_data:
             self.out_queue.put(out)
 
@@ -713,7 +715,7 @@ class TransformersStreamer():
         # make sure we have flushed all of the data
         for i in range(len(self.input_ids)):
             assert self.str_pos[i] >= len(self.generated_string[i]), "Not all data was flushed, this means generation stopped for an unknown reason!"
-        
+
         self.out_queue.put(None)
 
     def __iter__(self):
