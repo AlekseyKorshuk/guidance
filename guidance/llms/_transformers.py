@@ -293,8 +293,11 @@ class TransformersSession(LLMSession):
             print("max_new_tokens", max_tokens)
             print("input_ids", input_ids)
             print("len", len(input_ids[0]))
+
             if max_tokens + len(input_ids[0]) > max_context:
-                max_tokens = max_context - len(input_ids[0])
+                input_ids = input_ids[:, -max_tokens:]
+                print("updated len", len(input_ids[0]))
+                # max_tokens = max_context - len(input_ids[0])
 
             # find how much of the prompt is cached
             prefix_match_len = 0
