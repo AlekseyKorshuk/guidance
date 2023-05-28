@@ -295,8 +295,8 @@ class TransformersSession(LLMSession):
             print("len", len(input_ids[0]))
 
             if max_tokens + len(input_ids[0]) > max_context:
-
                 input_ids = input_ids[:, -(max_context - max_tokens):]
+                attention_mask = attention_mask[:, -(max_context - max_tokens):]
                 print("updated len", len(input_ids[0]))
                 # max_tokens = max_context - len(input_ids[0])
 
