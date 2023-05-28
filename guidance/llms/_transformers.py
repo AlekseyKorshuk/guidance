@@ -289,15 +289,15 @@ class TransformersSession(LLMSession):
 
             # make sure we don't run off the end of the model
             max_context = (getattr(model_config, "max_sequence_length", None) or getattr(model_config, "max_seq_len", None) or getattr(model_config, "n_positions", None) or getattr(model_config, "max_position_embeddings"))
-            print("max_context", max_context)
-            print("max_new_tokens", max_tokens)
-            print("input_ids", input_ids)
-            print("len", len(input_ids[0]))
+            # print("max_context", max_context)
+            # print("max_new_tokens", max_tokens)
+            # print("input_ids", input_ids)
+            # print("len", len(input_ids[0]))
 
-            # if max_tokens + len(input_ids[0]) > max_context:
-            #     input_ids = input_ids[:, -(max_context - max_tokens):]
-            #     attention_mask = attention_mask[:, -(max_context - max_tokens):]
-            #     print("updated len", len(input_ids[0]))
+            if max_tokens + len(input_ids[0]) > max_context:
+                input_ids = input_ids[:, -(max_context - max_tokens):]
+                attention_mask = attention_mask[:, -(max_context - max_tokens):]
+                # print("updated len", len(input_ids[0]))
                 # max_tokens = max_context - len(input_ids[0])
 
             # find how much of the prompt is cached
