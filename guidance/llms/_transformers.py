@@ -359,6 +359,7 @@ class TransformersSession(LLMSession):
                 output_scores=logprobs is not None and logprobs > 0,
                 return_dict_in_generate=True
             )
+            print(generate_args)
 
             # override the model config for do_sample when the temperature requires it
             do_sample = getattr(self.llm.model_obj.config, "do_sample", None)
